@@ -2,6 +2,8 @@ from pyspark.sql import SparkSession
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.feature import VectorAssembler
 import os
+from pyspark.ml.classification import RandomForestClassifier
+from pyspark.ml import Pipeline
 
 spark = SparkSession.builder \
     .appName("Crime Clustering") \
@@ -31,5 +33,32 @@ for idx, batch_file in enumerate(batch_files):
     model_path = os.path.join(output_folder, f"kmeans_model_batch_{idx+1}")
     model.save(model_path)
     print(f"✅ Model saved to {model_path}")
+# TRAINING RANDOM FOREST CLASSIFIER
+print("\n🌲 Starting training Random Forest Classifier models")
+
+for idx, batch_file in enumerate(batch_files):
+    print(f"📂 Processing (RF): {batch_file}")
+    
+    df = spark.read.csv(batch_file, header=True, inferSchema=True)
+    df = df.select("LAT", "LON", "Victim.Age", "Victim.Sex", "Weapon.Desc", "Crime.Code", "Status.Code", "Severity").dropna()
+
+    # Encoding categorical columns (example: Victim.Sex, Weapon.Desc)
+    from pyspark.ml.feature import StringIndexer
+    sex_indexer = StringIndexer(inputCol="Victim.Sex", outputCol="Sex_Index")
+    weapon_indexer = StringIndexer(inputCol="Weapon.Desc", outputCol="Weapon_Index")
+    
+    assembler = VectorAssembler(
+        inputCols=["LAT", "LON", "Victim.Age", "Sex_Index", "Weapon_Index", "Crime.Code", "Status.Code"],
+        outputCol="features"
+    )
+    
+    rf = RandomForestClassifier(featuresCol="features", labelCol="Severity", numTrees=20)
+    
+    pipeline = Pipeline(stages=[sex_indexer, weapon_indexer, assembler, rf])
+    model = pipeline.fit(df)
+    
+    rf_model_path = os.path.join(output_folder, f"rf_model_batch_{idx+1}")
+    model.save(rf_model_path)
+    print(f"✅ RF Model saved to {rf_model_path}")
 
 spark.stop()
