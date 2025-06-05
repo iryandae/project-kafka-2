@@ -2,8 +2,9 @@ from pyspark.sql import SparkSession
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.feature import VectorAssembler
 import os
-from pyspark.ml.classification import RandomForestClassifier
+from pyspark.ml.classification import DecisionTreeClassifier
 from pyspark.ml import Pipeline
+from pyspark.ml.feature import StringIndexer
 
 spark = SparkSession.builder \
     .appName("Crime Clustering") \
@@ -33,32 +34,32 @@ for idx, batch_file in enumerate(batch_files):
     model_path = os.path.join(output_folder, f"kmeans_model_batch_{idx+1}")
     model.save(model_path)
     print(f"✅ Model saved to {model_path}")
-# TRAINING RANDOM FOREST CLASSIFIER
-print("\n🌲 Starting training Random Forest Classifier models")
+
+print("\n🌳 Starting training Decision Tree Classifier models")
 
 for idx, batch_file in enumerate(batch_files):
-    print(f"📂 Processing (RF): {batch_file}")
+    print(f"📂 Processing (DT): {batch_file}")
     
     df = spark.read.csv(batch_file, header=True, inferSchema=True)
-    df = df.select("LAT", "LON", "Victim.Age", "Victim.Sex", "Weapon.Desc", "Crime.Code", "Status.Code", "Severity").dropna()
+    df = df.select("LAT", "LON", "Vict Age", "Vict Sex", "Premis Desc", "Status", "Crm Cd").dropna()
 
-    # Encoding categorical columns (example: Victim.Sex, Weapon.Desc)
-    from pyspark.ml.feature import StringIndexer
-    sex_indexer = StringIndexer(inputCol="Victim.Sex", outputCol="Sex_Index")
-    weapon_indexer = StringIndexer(inputCol="Weapon.Desc", outputCol="Weapon_Index")
-    
+    # Encoding categorical columns
+    sex_indexer = StringIndexer(inputCol="Vict Sex", outputCol="Sex_Index")
+    premis_indexer = StringIndexer(inputCol="Premis Desc", outputCol="Premis_Index")
+    status_indexer = StringIndexer(inputCol="Status", outputCol="Status_Index")
+
     assembler = VectorAssembler(
-        inputCols=["LAT", "LON", "Victim.Age", "Sex_Index", "Weapon_Index", "Crime.Code", "Status.Code"],
+        inputCols=["LAT", "LON", "Vict Age", "Sex_Index", "Premis_Index", "Status_Index"],
         outputCol="features"
     )
-    
-    rf = RandomForestClassifier(featuresCol="features", labelCol="Severity", numTrees=20)
-    
-    pipeline = Pipeline(stages=[sex_indexer, weapon_indexer, assembler, rf])
+
+    dt = DecisionTreeClassifier(featuresCol="features", labelCol="Crm Cd")
+
+    pipeline = Pipeline(stages=[sex_indexer, premis_indexer, status_indexer, assembler, dt])
     model = pipeline.fit(df)
-    
-    rf_model_path = os.path.join(output_folder, f"rf_model_batch_{idx+1}")
-    model.save(rf_model_path)
-    print(f"✅ RF Model saved to {rf_model_path}")
+
+    dt_model_path = os.path.join(output_folder, f"dt_model_batch_{idx+1}")
+    model.save(dt_model_path)
+    print(f"✅ Decision Tree model saved to {dt_model_path}")
 
 spark.stop()
